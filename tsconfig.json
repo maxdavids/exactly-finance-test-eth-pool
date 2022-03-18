@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        "target": "es5",
+        "module": "commonjs",
+        "strict": true,
+        "esModuleInterop": true,
+        "moduleResolution": "node",
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "downlevelIteration": true,
+        "outDir": "dist"
+    },
+    "include": [
+        "./deploy",
+        "./scripts",
+        "./test",
+        "types/**/*",
+    ],
+    "exclude": [
+        "./dist",
+        "./node_modules"
+    ],
+    "files": [
+        "./hardhat.config.ts"
+    ]
+}
