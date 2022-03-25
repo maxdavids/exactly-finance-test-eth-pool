@@ -8,12 +8,9 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 /**
  * @title ETHPool: Deposit ETH and receive weekly rewards.
  *
- * @notice Adds to an ERC20 support for grantor wallets, which are able to grant vesting tokens to
- *   beneficiary wallets, following per-wallet custom vesting schedules.
- *
- * @dev Contract which provides a service where people can deposit ETH and receive weekly rewards.
- *   Users are able to take out their deposits along with their portion of rewards at any time.
- *   New rewards are deposited into the pool by the ETHPool team each week.
+ * @notice A contract which provides a service where people can deposit ETH and receive weekly rewards.
+ *   Users are able to take out their deposits along with their portion of the rewards at any time.
+ *   New rewards are deposited into the pool by the ETHPool's team each week.
  *
  *   - Only the team can deposit rewards.
  *   - Deposited rewards go to the pool of users, not to individual users.
@@ -29,11 +26,23 @@ contract ETHPoolV1 is Initializable, PausableUpgradeable, AccessControlUpgradeab
     mapping(address => uint256) internal _accountsBalance;
     mapping(address => int256) internal _payoutsTo;
 
-    uint256 internal _totalAccountsBalance = 0;
-    uint256 internal _rewardsPerShare = 0;
+    uint256 internal _totalAccountsBalance;
+    uint256 internal _rewardsPerShare;
+
+    event DepositedRewards(address indexed callerAddress, uint256 amountETH);
+    event DepositedETH(address indexed clientAddress, uint256 amountETH);
+    event WithdrewTotalAccountBalance(address indexed clientAddress, uint256 ethToWithdraw);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
+
+    receive() external payable virtual {
+        depositETH();
+    }
+
+    fallback() external payable virtual {
+        
+    }
 
     // ================
     // PUBLIC FUNCTIONS
@@ -57,42 +66,40 @@ contract ETHPoolV1 is Initializable, PausableUpgradeable, AccessControlUpgradeab
         _unpause();
     }
 
+    /// @notice Deposit ETH rewards to the rewards pool.
     function depositRewards()
         public
         payable
         virtual
         whenNotPaused
         onlyRole(DEFAULT_ADMIN_ROLE)
-        returns(uint256)
     {
         address callerAddress = _msgSender();
         uint256 amountETH = msg.value;
 
+        require(amountETH > 0, "ETH amount must be > 0");
+        require(_totalAccountsBalance > 0, "There is no account balance");
+
         _rewardsPerShare += (amountETH * MAGNITUDE) / _totalAccountsBalance;
 
         // Fire event
-        emit DepositRewards(callerAddress, amountETH);
+        emit DepositedRewards(callerAddress, amountETH);
     }
 
-    function() payable public virtual {
-        depositETH(msg.value);
-    }
-
+    /// @notice Deposit ETH to earn weekly rewards.
     function depositETH()
         public
         payable
         virtual
         whenNotPaused
-        returns(uint256)
     {
         address clientAddress = _msgSender();
         uint256 incomingETH = msg.value;
 
-        require(incomingETH > 0, "Deposit should be greater than 0");
+        require(incomingETH > 0, "Amount to deposit should be > 0");
 
         if(_totalAccountsBalance > 0){
             _totalAccountsBalance += incomingETH;
-
         } else {
             _totalAccountsBalance = incomingETH;
         }
@@ -103,37 +110,44 @@ contract ETHPoolV1 is Initializable, PausableUpgradeable, AccessControlUpgradeab
         _payoutsTo[clientAddress] += (int256) (_rewardsPerShare * incomingETH);
 
         // Fire event
-        emit DepositETH(clientAddress, incomingETH);
-
-        return incomingETH;
+        emit DepositedETH(clientAddress, incomingETH);
     }
 
-    /**
-     * @dev Transfers to the sender their deposited ETH plus their unclaimed rewards.
-     * Could be split into: withdrawTotalAccountBalance, withdrawAccountBalance, and withdrawAccountRewards.
-     */
-    function withdrawTotalAccountBalance() public virtual whenNotPaused {
+    /// @notice Transfers to the sender their deposited ETH plus their unclaimed rewards.
+    /// @dev Could be split into: withdrawTotalAccountBalance, withdrawAccountBalance, and withdrawAccountRewards.
+    function withdrawTotalAccountBalance()
+        public
+        virtual
+        whenNotPaused
+    {
         address clientAddress = _msgSender();
 
-        uint256 ethToWithdraw = balanceOf(clientAddress);
+        uint256 balanceToWithdraw = balanceOf(clientAddress);
         uint256 rewardsToWithdraw = rewardsOf(clientAddress);
 
         // withdrawAccountRewards
         _payoutsTo[clientAddress] += (int256) (rewardsToWithdraw * MAGNITUDE);
 
         // withdrawAccountBalance
-        _totalAccountsBalance -= ethToWithdraw;
-        _accountsBalance[clientAddress] -= ethToWithdraw;
+        _totalAccountsBalance -= balanceToWithdraw;
+        _accountsBalance[clientAddress] -= balanceToWithdraw;
 
-        int256 _transactionPayouts = (int256) (_rewardsPerShare * ethToWithdraw + (_taxedEthereum * MAGNITUDE));
+        int256 _transactionPayouts = (int256) (_rewardsPerShare * balanceToWithdraw + (balanceToWithdraw * MAGNITUDE));
         _payoutsTo[clientAddress] -= _transactionPayouts;
 
         // Transfer the total balance
-        clientAddress.transfer(ethToWithdraw + rewardsToWithdraw);
+        uint256 totalETHToWithdraw = balanceToWithdraw + rewardsToWithdraw;
+
+        (bool sent,) = payable(clientAddress).call{value: totalETHToWithdraw}("");
+        require(sent, "Failed to send ETH");
 
         // Fire event
-        emit WithdrawTotalAccountBalance(clientAddress, ethToWithdraw);
+        emit WithdrewTotalAccountBalance(clientAddress, totalETHToWithdraw);
     }
+
+    // ================
+    // GETTER FUNCTIONS
+    // ================
 
     function totalAccountsBalance() public view virtual returns(uint256) {
         return _totalAccountsBalance;
@@ -144,7 +158,11 @@ contract ETHPoolV1 is Initializable, PausableUpgradeable, AccessControlUpgradeab
     }
 
     function rewardsOf(address clientAddress) public view virtual returns(uint256) {
-        return (uint256) ((int256)(_rewardsPerShare * _accountsBalance[clientAddress]) - _payoutsTo[clientAddress]) / MAGNITUDE;
+        uint256 totalRewards = _rewardsPerShare * _accountsBalance[clientAddress];
+        int256 totalPayouts = _payoutsTo[clientAddress];
+        int256 claimableRewards = (int256(totalRewards) - totalPayouts) / int256(MAGNITUDE);
+
+        return uint256(claimableRewards);
     }
 
     function version() public pure virtual returns (string memory) {
@@ -158,6 +176,7 @@ contract ETHPoolV1 is Initializable, PausableUpgradeable, AccessControlUpgradeab
     function _authorizeUpgrade(address newImplementation)
         internal
         onlyRole(UPGRADER_ROLE)
+        virtual
         override
     {}
 }

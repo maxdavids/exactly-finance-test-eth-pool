@@ -3,30 +3,18 @@ import { ethers, upgrades } from 'hardhat';
 
 export async function deploy() {
     const contractName: string = 'ETHPoolV1';
-    const newOwner: string = '';
 
-    // -----------
+    // ===========
     // DEPLOY POOL
-    // -----------
+    // ===========
 
     console.log(`Deploying ${contractName}`);
 
     const newPoolFactory: ContractFactory = await ethers.getContractFactory(contractName);
-    const proxyContract = await upgrades.deployProxy(newPoolFactory);
+    const proxyContract = await upgrades.deployProxy(newPoolFactory, { kind: 'uups' });
     await proxyContract.deployed();
 
     console.log(`Deployed to ${proxyContract.address}`);
-
-
-    // ----------------
-    // CHANGE OWNERSHIP
-    // ----------------
-
-    console.log(`Transfering ownership to ${newOwner}`);
-
-    await upgrades.admin.transferProxyAdminOwnership(newOwner);
-
-    console.log(`Proxy ownership transfer complete`);
 }
 
 deploy()

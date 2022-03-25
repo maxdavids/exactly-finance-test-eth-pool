@@ -1,4 +1,5 @@
 import '@nomiclabs/hardhat-waffle';
+import '@openzeppelin/hardhat-upgrades';
 import { HardhatUserConfig } from 'hardhat/types';
 import networks from "./hardhat.network";
 

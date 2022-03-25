@@ -16,21 +16,14 @@ const networks: NetworksUserConfig = {
     hardhat: {
         allowUnlimitedContractSize: false,
     },
-};
-
-if (mnemonic) {
-    networks.bsctestnet = {
-        url: "https://data-seed-prebsc-1-s1.binance.org:8545",
-        chainId: 97,
-        gasPrice: 20000000000,
+    ropsten: {
+        url: `https://ropsten.infura.io/v3/${process.env.INFURA_API_KEY}`,
         accounts: { mnemonic: mnemonic }
-    };
-    networks.bscmainnet = {
-        url: "https://bsc-dataseed.binance.org/",
-        chainId: 56,
-        gasPrice: 20000000000,
+    },
+    rinkeby: {
+        url: `https://rinkeby.infura.io/v3/${process.env.INFURA_API_KEY}`,
         accounts: { mnemonic: mnemonic }
-    };
+    }
 }
 
 export default networks;
