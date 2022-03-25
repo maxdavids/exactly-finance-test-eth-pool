@@ -1,12 +1,11 @@
-# ETHPool-contracts
-https://github.com/exactly-finance/challenge
+# ETHPool-contracts - Davids Maximiliano
+### Developer Notes
+I am unable to spend more time on this challenge, please note:
+- Deployment to testnet pending
+- I would have liked to create an interface IETHPool
+- Code cleanup and more test cases would have been ideal
 
-## Deploy pool to testnet
+## Test project
 ```bash
-yarn hardhat run scripts/deploy-base.ts --network bsctestnet
-```
-
-## Deploy token RUN to mainnet
-```bash
-yarn hardhat run scripts/deploy-base.ts --network bscmainnet
+yarn test
 ```
