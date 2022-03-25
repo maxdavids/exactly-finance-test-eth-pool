@@ -17,66 +17,80 @@ describe("ETHPoolV1 contract", function () {
 
     before(async () => {
         [deployer, alice, john, mike, ...addrs] = await ethers.getSigners();
-        provider = ethers.getDefaultProvider();
+        provider = ethers.provider;
         poolFactoryV1 = await ethers.getContractFactory('ETHPoolV1');
     });
 
     beforeEach(async () => {
         poolContract = await upgrades.deployProxy(poolFactoryV1, { kind: 'uups' });
+        await poolContract.deployed();
     });
 
     describe("Client account management", () => {
-        it("Should increase Alice's balance", async () => {
+        it("Should increase A's balance", async () => {
             const addAmount: BigNumber = ethers.utils.parseEther("1.0");
 
-            const balanceBefore: any = await poolContract.balanceOf(alice.address);
+            const balanceBefore: BigNumber = await poolContract.balanceOf(alice.address);
             await alice.sendTransaction({ to: poolContract.address, value: addAmount });
-            const balanceAfter: any = await poolContract.balanceOf(alice.address);
+            const balanceAfter: BigNumber = await poolContract.balanceOf(alice.address);
 
-            expect((balanceBefore.add(addAmount)).to.equal(balanceAfter));
+            expect(balanceBefore.add(addAmount)).to.equal(balanceAfter);
         });
 
-        it("Should withdraw Alice's balance", async () => {
-            const aliceBalanceBefore: any = await provider.getBalance(alice.address);
-            const accountBalanceBefore: any = await poolContract.balanceOf(alice.address);
-            await poolContract.connect(alice).withdrawTotalAccountBalance();
-            const aliceBalanceAfter: any = await provider.getBalance(alice.address);
-            const accountBalanceAfter: any = await poolContract.balanceOf(alice.address);
+        it("Should withdraw A's balance", async () => {
+            const addAmount: BigNumber = ethers.utils.parseEther("1.0");
 
-            expect((aliceBalanceBefore.add(accountBalanceBefore)).to.equal(aliceBalanceAfter));
-            expect(accountBalanceAfter.to.equal(0));
+            await alice.sendTransaction({ to: poolContract.address, value: addAmount });
+            const aliceWithdrawal = await poolContract.connect(alice).withdrawTotalAccountBalance();
+
+            await expect(aliceWithdrawal).to.changeEtherBalance(alice, addAmount);
+
+            const accountBalanceAfter: BigNumber = await poolContract.balanceOf(alice.address);
+            expect(accountBalanceAfter).to.equal(0);
         });
     });
 
-    /*
     describe("Reward distribution", () => {
-        it("Should distribute rewards Alice", async () => {
-            const addAmount: BigNumber = ethers.utils.parseEther("1.0");
+        it("Should distribute rewards to A", async () => {
+            const aliceAddAmount: BigNumber = ethers.utils.parseEther("1.0");
+            const teamAddRewards: BigNumber = ethers.utils.parseEther("1.0");
 
-            await alice.sendTransaction({ to: poolContract.address, value: addAmount });
-            const balanceAfter: any = await poolContract.balanceOf(alice.address);
+            await poolContract.connect(alice).depositETH({ value: aliceAddAmount });
+            const aliceRewardsBefore: BigNumber = await poolContract.rewardsOf(alice.address);
 
-            expect((balanceBefore.add(addAmount)).to.equal(balanceAfter));
+            await poolContract.connect(deployer).depositRewards({ value: teamAddRewards });
+            const aliceRewardsAfter: BigNumber = await poolContract.rewardsOf(alice.address);
+
+            expect(aliceRewardsBefore.add(teamAddRewards)).to.equal(aliceRewardsAfter);
         });
 
-        it("Should withdraw Alice's balance", async () => {
-            const aliceBalanceBefore: any = await provider.getBalance(alice.address);
-            const accountBalanceBefore: any = await poolContract.balanceOf(alice.address);
-            await poolContract.connect(alice).withdrawTotalAccountBalance();
-            const aliceBalanceAfter: any = await provider.getBalance(alice.address);
-            const accountBalanceAfter: any = await poolContract.balanceOf(alice.address);
+        it("Should distribute rewards based on A deposits, T deposits, B deposits, T deposits", async () => {
+            const aliceAddAmount: BigNumber = ethers.utils.parseEther("1.0");
+            const johnAddAmount: BigNumber = ethers.utils.parseEther("1.0");
+            const teamAddRewards1: BigNumber = ethers.utils.parseEther("1.0");
+            const teamAddRewards2: BigNumber = ethers.utils.parseEther("1.0");
 
-            expect((aliceBalanceBefore.add(accountBalanceBefore)).to.equal(aliceBalanceAfter));
-            expect(accountBalanceAfter.to.equal(0));
+            const johnTotalRewards: BigNumber = ethers.utils.parseEther("0.5");
+            const aliceTotalRewards: BigNumber = ethers.utils.parseEther("1.5");
+
+            await poolContract.connect(alice).depositETH({ value: aliceAddAmount });
+            await poolContract.connect(deployer).depositRewards({ value: teamAddRewards1 });
+
+            expect(await poolContract.rewardsOf(alice.address)).to.equal(teamAddRewards1);
+
+            await poolContract.connect(john).depositETH({ value: johnAddAmount });
+            const johnRewardsBefore: BigNumber = await poolContract.rewardsOf(john.address);
+
+            await poolContract.connect(deployer).depositRewards({ value: teamAddRewards2 });
+            const johnRewardsAfter: BigNumber = await poolContract.rewardsOf(john.address);
+
+            expect(johnRewardsBefore.add(johnTotalRewards)).to.equal(johnRewardsAfter);
+            expect(await poolContract.rewardsOf(alice.address)).to.equal(aliceTotalRewards);
+
+            const aliceWithdrawal = await poolContract.connect(alice).withdrawTotalAccountBalance();
+            await expect(aliceWithdrawal).to.changeEtherBalance(alice, aliceAddAmount.add(aliceTotalRewards));
         });
     });
-    */
-
-    /*
-    Let say we have user A and B and team T.
-    A deposits 100, and B deposits 300 for a total of 400 in the pool. Now A has 25% of the pool and B has 75%. When T deposits 200 rewards, A should be able to withdraw 150 and B 450.
-    What if the following happens? A deposits then T deposits then B deposits then A withdraws and finally B withdraws. A should get their deposit + all the rewards. B should only get their deposit because rewards were sent to the pool before they participated.
-    */
 
     describe("Upgrade", () => {
         beforeEach(async () => {
